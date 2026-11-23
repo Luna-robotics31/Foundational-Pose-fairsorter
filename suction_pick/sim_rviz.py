@@ -67,7 +67,11 @@ def plan_scene(args):
     from .geometry import depth_to_points, transform
     from .robot import equivalent_grasps, linear_chain_problem, plan_route, waypoints
 
-    cap = Path(args.capture) if args.capture else max(OUT_ROOT.glob("pick_*"), key=lambda p: p.name)
+    captures = sorted(OUT_ROOT.glob("pick_*"), key=lambda p: p.name)
+    if not args.capture and not captures:
+        raise SystemExit("[SIM] No saved scene yet. Capture one first with a dry run (the robot does not move):\n"
+                         "      python run.py pick\n      then run:  python run.py sim")
+    cap = Path(args.capture) if args.capture else captures[-1]
     print(f"[SIM] capture {cap}")
     bgr = cv2.imread(str(cap / "color.png"))
     depth, K, T_base_cam = np.load(cap / "depth_mm.npy"), np.load(cap / "K.npy"), np.load(cap / "T_plan_cam.npy")

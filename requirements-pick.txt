@@ -1,0 +1,35 @@
+# Python packages for the suction pick (suction_pick/) and its shared robot/camera code (cube_pick/).
+# Versions are the ones running on the lab laptop (Ubuntu 22.04, Fairino FR10, Orbbec Gemini 2).
+#
+# Requirements:
+#   * Python 3.10  - the bundled Fairino SDK (cube_pick/robot/fairino_driver/Robot.cpython-310-*.so)
+#                    is built for CPython 3.10, and ROS 2 Humble (for the RViz simulation) uses 3.10.
+#   * Install:     python3.10 -m venv .venv && source .venv/bin/activate
+#                  pip install -r requirements-pick.txt
+#                  pip install --no-deps pyorbbecsdk2==2.1.2      <- camera driver, see below
+#   * NOT from pip (see README.md, section "Install"):
+#       - Orbbec USB permissions: sudo bash <site-packages>/pyorbbecsdk/shared/install_udev_rules.sh
+#       - ROS 2 Humble + RViz2 (simulation only): sudo apt install ros-humble-desktop
+#         (rclpy, sensor_msgs_py, visualization_msgs, tf2_ros come from ROS, not from pip)
+#   * The Fairino Python SDK is bundled in the repo (cube_pick/robot/fairino_driver/), not installed.
+
+numpy==2.2.6
+scipy==1.15.3
+opencv-python==5.0.0.93     # cv2: image I/O, overlays, connected components
+trimesh==5.2.0              # imported by the shared camera code (cube_pick/vision/live_tracker.py)
+# Orbbec Gemini 2 driver (Python module `pyorbbecsdk`) is installed SEPARATELY with --no-deps:
+#     pip install --no-deps pyorbbecsdk2==2.1.2
+# Its metadata pins numpy<2 and open3d==0.18 for its example scripts; the driver itself only needs
+# numpy and works with numpy 2.2.6 (used with the Gemini 2 on this robot). Installing it with its
+# declared dependencies would conflict with opencv-python 5 (numpy>=2).
+rich==15.0.0                # coloured console output (suction_pick/run.py)
+
+# ---------------------------------------------------------------------------------------------
+# Optional: the FoundationPose cube pick (cube_pick/, `python -m cube_pick`) also needs a CUDA GPU
+# and the FoundationPose stack. Not needed for the suction pick. Install in the same venv:
+#   pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cu130
+#   pip install --no-build-isolation git+https://github.com/NVlabs/nvdiffrast.git
+#   pip install -r requirements.txt            # FoundationPose's own list (open3d, warp-lang, ...)
+#   pip install ultralytics==8.4.128           # YOLO cube detector
+#   bash build_all.sh                          # builds mycpp (C++ extension used by FoundationPose)
+# ---------------------------------------------------------------------------------------------

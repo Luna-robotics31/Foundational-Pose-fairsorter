@@ -1,5 +1,10 @@
 # Cube pick with FoundationPose + Fairino cobot
 
+> **Status (2026-11):** this is the older FoundationPose cube pick for a **two-finger gripper** on
+> tool 1. Tool 1 is now the suction cup, so this pick does not match the current hardware. For picking
+> parcels with the suction gripper see the main `readme.md` and `suction_pick/`. Install: Python 3.10,
+> `requirements-pick.txt` plus the optional cube-pick packages listed at its end.
+
 An Orbbec Gemini 2 camera on the robot's gripper finds a white recessed cube. FoundationPose
 estimates the cube's 6D pose, and the Fairino cobot picks it up with a two-finger gripper.
 
