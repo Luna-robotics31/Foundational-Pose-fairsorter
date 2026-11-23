@@ -40,67 +40,86 @@ def find_planes(points_cam, max_range, tol, max_planes=4, min_share=0.08):
     return planes
 
 
-def measure_board(points_cam: np.ndarray, K: np.ndarray, T_base_cam: np.ndarray,
-                  max_range: float = 2500.0, tol: float = 6.0, edge_px: int = 6):
-    """Rectangle of the table / board: the NEAREST large horizontal plane in view (so a floor
-    visible around a low table is not taken), plus the floor height below it if seen.
-
-    Returns dict: corners_base (4, 3), normal_base (up), size_mm (long, short), cut_sides
-    (rectangle sides that run outside the image, i.e. not fully seen), floor_z, inlier fraction.
-    """
-    planes = find_planes(points_cam, max_range, tol)
-    level = []
-    for n_, c_, share, rms_ in planes:               # keep planes that are horizontal in the robot frame
-        nb_ = T_base_cam[:3, :3] @ n_
-        if abs(nb_[2]) > np.cos(np.radians(30)):
-            level.append((abs(c_), n_, c_, share, rms_))
-    if not level:
-        raise RuntimeError("No large horizontal surface in view.")
-    level.sort(key=lambda t: t[0])                   # nearest to the camera first
-    _, n, c, frac, rms = level[0]
-    floor_z = None
-    for _, n2, c2, _, _ in level[1:]:                # a lower plane further away = the floor
-        p_board = T_base_cam[:3, :3] @ (c * n) + T_base_cam[:3, 3]
-        p_other = T_base_cam[:3, :3] @ (c2 * n2) + T_base_cam[:3, 3]
-        if p_other[2] < p_board[2] - 50:
-            floor_z = float(p_other[2]) if floor_z is None else min(floor_z, float(p_other[2]))
+def _rectangle(points_cam, n, c, K, tol, max_range, edge_px):
+    """Rectangle of one plane's points: (corners in the camera frame (4, 3), length, width, cut sides).
+    Cut sides = sides that run outside the image (that edge was not seen)."""
     on = np.isfinite(points_cam).all(axis=2)
     on &= np.abs(np.nan_to_num(points_cam @ n) - c) < tol
     on &= np.nan_to_num(points_cam[..., 2], nan=1e9) <= max_range
     mask = cv2.morphologyEx(on.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
     k, lab, st, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     if k < 2:
-        raise RuntimeError("No board found in view.")
+        return None
     big = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))
-    P = points_cam[(lab == big) & on]                         # board points, camera frame
-    # 2D coordinates in the board plane
-    e1 = np.cross(n, [0.0, 1.0, 0.0])
+    P = points_cam[(lab == big) & on]                         # plane points, camera frame
+    if len(P) < 500:
+        return None
+    e1 = np.cross(n, [0.0, 1.0, 0.0])                         # 2D coordinates in the plane
     e1 /= np.linalg.norm(e1)
     e2 = np.cross(n, e1)
-    o = c * n                                                 # point of the plane
+    o = c * n
     uv = np.column_stack([(P - o) @ e1, (P - o) @ e2]).astype(np.float32)
     # Orientation from the minimum-area rectangle; extent from quantiles along its axes, so a few
-    # stray "board" pixels at the noisy depth edges do not push the walls outward.
+    # stray pixels at the noisy depth edges do not push the walls outward.
     _, _, ang = cv2.minAreaRect(uv)
-    a = np.radians(ang)
-    ax1, ax2 = np.array([np.cos(a), np.sin(a)]), np.array([-np.sin(a), np.cos(a)])
+    t = np.radians(ang)
+    ax1, ax2 = np.array([np.cos(t), np.sin(t)]), np.array([-np.sin(t), np.cos(t)])
     s1, s2 = uv @ ax1, uv @ ax2
     lo1, hi1 = np.percentile(s1, [0.3, 99.7])
     lo2, hi2 = np.percentile(s2, [0.3, 99.7])
-    w, h = hi1 - lo1, hi2 - lo2
     box = np.array([lo1 * ax1 + lo2 * ax2, hi1 * ax1 + lo2 * ax2, hi1 * ax1 + hi2 * ax2, lo1 * ax1 + hi2 * ax2])
-    corners_cam = np.array([o + a * e1 + b * e2 for a, b in box])
-    # sides that leave the image were not seen completely
+    corners = np.array([o + x * e1 + y * e2 for x, y in box])
     cut = []
     H, W = points_cam.shape[:2]
     for i in range(4):
-        a, b = corners_cam[i], corners_cam[(i + 1) % 4]
-        s = a + np.linspace(0, 1, 60)[:, None] * (b - a)
-        u = K[0, 0] * s[:, 0] / s[:, 2] + K[0, 2]
-        v = K[1, 1] * s[:, 1] / s[:, 2] + K[1, 2]
-        inside = (s[:, 2] > 0) & (u > edge_px) & (u < W - edge_px) & (v > edge_px) & (v < H - edge_px)
+        p0, p1 = corners[i], corners[(i + 1) % 4]
+        q = p0 + np.linspace(0, 1, 60)[:, None] * (p1 - p0)
+        u = K[0, 0] * q[:, 0] / q[:, 2] + K[0, 2]
+        v = K[1, 1] * q[:, 1] / q[:, 2] + K[1, 2]
+        inside = (q[:, 2] > 0) & (u > edge_px) & (u < W - edge_px) & (v > edge_px) & (v < H - edge_px)
         if inside.mean() < 0.9:
             cut.append(i)
+    return corners, float(hi1 - lo1), float(hi2 - lo2), cut
+
+
+def measure_board(points_cam: np.ndarray, K: np.ndarray, T_base_cam: np.ndarray,
+                  max_range: float = 2500.0, tol: float = 6.0, edge_px: int = 6):
+    """Rectangle of the table / board, plus the floor height below it if seen.
+
+    The table = the LARGEST horizontal surface whose whole outline is inside the image:
+      * the floor around a table runs off the image -> never chosen;
+      * a box or parcel standing on the table is smaller than the table -> not chosen.
+    If no surface is fully in view, the nearest surface covering >= 20 % of the view is used and
+    its cut sides are reported.
+
+    Returns dict: corners_base (4, 3), normal_base (up), size_mm (long, short), cut_sides
+    (rectangle sides that run outside the image, i.e. not fully seen), floor_z, inlier fraction.
+    """
+    planes = find_planes(points_cam, max_range, tol)
+    cands = []
+    for n_, c_, share, rms_ in planes:               # horizontal planes in the robot frame
+        nb_ = T_base_cam[:3, :3] @ n_
+        if abs(nb_[2]) <= np.cos(np.radians(30)):
+            continue
+        rect = _rectangle(points_cam, n_, c_, K, tol, max_range, edge_px)
+        if rect is None:
+            continue
+        z_ = (T_base_cam[:3, :3] @ (c_ * n_) + T_base_cam[:3, 3])[2]
+        print(f"[BIN] flat surface: {rect[1]:.0f} x {rect[2]:.0f} mm, {share:.0%} of the view, z {z_:.0f} mm, "
+              f"{'fully in view' if not rect[3] else 'runs out of the image'}")
+        cands.append({"n": n_, "c": c_, "share": share, "rms": rms_, "rect": rect, "z": z_})
+    if not cands:
+        raise RuntimeError("No large horizontal surface in view.")
+    complete = [t for t in cands if not t["rect"][3]]
+    if complete:
+        table = max(complete, key=lambda t: t["rect"][1] * t["rect"][2])
+    else:
+        big = [t for t in cands if t["share"] >= 0.20] or cands
+        table = min(big, key=lambda t: abs(t["c"]))
+    n, frac, rms = table["n"], table["share"], table["rms"]
+    corners_cam, w, h, cut = table["rect"]
+    lower = [t["z"] for t in cands if t["z"] < table["z"] - 50]   # >= 50 mm below the table = the floor
+    floor_z = float(min(lower)) if lower else None
     corners_base = (T_base_cam[:3, :3] @ corners_cam.T).T + T_base_cam[:3, 3]
     nb = T_base_cam[:3, :3] @ n
     nb = -nb if nb[2] < 0 else nb                             # up

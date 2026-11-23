@@ -158,3 +158,6 @@ logs/
 run_used.yml
 # Orbbec SDK runtime log (written to the working directory)
 Log/
+
+# suction pick saved setup (bin, camera calibration) is tracked, despite the data/ rule above
+!suction_pick/data/

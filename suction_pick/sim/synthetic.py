@@ -21,12 +21,12 @@ BOXES = [
 ]
 
 
-def render(noise_mm=0.5, seed=0, boxes=None):
+def render(noise_mm=0.5, seed=0, boxes=None, extent=(260.0, 200.0)):
     """Z-buffer a fine height field into the camera. Returns (depth_mm, truth dict)."""
     boxes = BOXES if boxes is None else boxes
     step = 0.4
-    xs = np.arange(-260, 260, step)
-    ys = np.arange(-200, 200, step)
+    xs = np.arange(-extent[0], extent[0], step)   # floor / table area that is rendered, mm
+    ys = np.arange(-extent[1], extent[1], step)
     X, Y = np.meshgrid(xs, ys)
     Z = np.full(X.shape, TABLE_Z)
     owner = np.full(X.shape, -1)
