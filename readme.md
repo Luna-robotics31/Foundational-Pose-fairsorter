@@ -30,7 +30,7 @@ If you are new here, follow this file from top to bottom. Every command below is
 11. [Files and settings](#11-files-and-settings)
 12. [Useful options](#12-useful-options)
 13. [Troubleshooting](#13-troubleshooting)
-14. [Other folders (cube pick, welding test, segmentation lab)](#14-other-folders)
+14. [Other folders (cube pick, segmentation lab)](#14-other-folders)
 15. [Credits and licence](#15-credits-and-licence)
 
 ---
@@ -43,7 +43,7 @@ If you are new here, follow this file from top to bottom. Every command below is
 | `cube_pick/` | Shared robot and camera code used by the suction pick (robot connection, tool data, home pose, camera driver, Fairino SDK in `cube_pick/robot/fairino_driver/`), plus the older FoundationPose cube pick (section 14) |
 | `requirements-pick.txt` | Python packages for the suction pick |
 | `requirements.txt` | FoundationPose's own packages (only for the cube pick) |
-| `wield_test/`, `parcel_segmentation_lab/` | Separate experiments (section 14) |
+| `parcel_segmentation_lab/` | Separate segmentation experiment (section 14) |
 | `estimater.py`, `learning/`, `mycpp/`, `weights/`, … | The FoundationPose 6D pose model (NVIDIA); only the cube pick uses it |
 
 Inside `suction_pick/` **only `run.py` is run**. Everything else is in folders:
@@ -450,11 +450,10 @@ of `requirements-pick.txt`, then:
 python -m cube_pick              # from the repository root; details in cube_pick/README.md
 ```
 
-### `wield_test/`, `parcel_segmentation_lab/`
+### `parcel_segmentation_lab/`
 
-Separate experiments: a smooth-corner welding path test for the Fairino (`wield_test/README.md`) and a
-parcel segmentation lab with its own README and requirements (`parcel_segmentation_lab/README.md`).
-The suction pick does not use them.
+A separate parcel segmentation experiment with its own README and requirements
+(`parcel_segmentation_lab/README.md`). The suction pick does not use it.
 
 ---
 

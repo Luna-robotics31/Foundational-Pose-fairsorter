@@ -327,7 +327,7 @@ class OrbbecCamera:
 def build_estimator(mesh, debug_dir):
     import torch
     if not torch.cuda.is_available():
-        raise RuntimeError("FoundationPose requires CUDA. Activate the GPU environment used for run_demo.py.")
+        raise RuntimeError("FoundationPose requires CUDA. Activate the GPU (CUDA) environment.")
     config.add_to_path(config.FP_ROOT / "mycpp/build")
     from estimater import FoundationPose
     from Utils import set_seed
