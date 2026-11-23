@@ -1,0 +1,13 @@
+{"about": "Collision capsules of the FR10 links (link frames of fr10.urdf, mm): each link's mesh surface lies inside the union of its capsules; radius includes a 3 mm margin.",
+ "capsules": [
+  {"link": "shoulder_link", "name": "shoulder", "p0": [-2.3, -1.4, 182.4], "p1": [-2.4, -3.4, 182.2], "r": 127.4},
+  {"link": "upperarm_link", "name": "upper arm", "p0": [2.0, -0.4, 187.7], "p1": [-23.6, -0.5, 186.2], "r": 127.4},
+  {"link": "upperarm_link", "name": "upper arm", "p0": [-141.3, -0.5, 183.1], "p1": [-606.3, 0.4, 186.3], "r": 63.0},
+  {"link": "upperarm_link", "name": "upper arm", "p0": [-700.8, -0.4, 187.8], "p1": [-695.6, -0.1, 186.9], "r": 100.1},
+  {"link": "forearm_link", "name": "forearm", "p0": [-585.4, 0.1, 40.5], "p1": [-584.7, 0.1, 40.9], "r": 83.7},
+  {"link": "forearm_link", "name": "forearm", "p0": [-509.8, -0.1, 45.1], "p1": [-87.7, 0.2, 44.4], "r": 48.6},
+  {"link": "forearm_link", "name": "forearm", "p0": [-45.4, 0.1, 55.4], "p1": [3.7, -0.4, 85.0], "r": 68.1},
+  {"link": "wrist1_link", "name": "wrist 1", "p0": [-0.3, 5.5, 196.4], "p1": [-0.4, -6.2, 167.8], "r": 83.8},
+  {"link": "wrist2_link", "name": "wrist 2", "p0": [0.1, -4.5, 113.6], "p1": [0.7, -4.5, 113.6], "r": 83.6},
+  {"link": "wrist3_link", "name": "wrist 3", "p0": [-0.7, -2.2, 80.1], "p1": [-0.1, 0.7, 80.1], "r": 52.3}
+]}

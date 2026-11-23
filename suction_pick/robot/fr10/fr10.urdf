@@ -1,0 +1,75 @@
+<?xml version="1.0"?>
+<!-- Fairino FR10, hardware V5.0 (the controller reports FR10-V1-000(V5.0)).
+
+  Joints: exactly the controller's kinematics (GetForwardKin, checked: 0.00 mm), standard DH
+    d1 = 180, a2 = -700, a3 = -586, d4 = 195, d5 = 114, d6 = 106 mm (link "flange" = tool 0).
+  Meshes: Fairino's FR10 V5 collision meshes (meshes/fr10/collision), decimated; each one put
+    on its link by matching it to Fairino's V6 mesh of the same link (median gap 2-5 mm). The V6 URDF in
+    fairino_description (fairino10_v6) does NOT match this robot: its d4 is 159 mm (36 mm off).
+  Used by: the RViz simulation (python run.py sim) and the whole-arm collision capsules
+    (robot/arm.py fits one capsule around each mesh).
+-->
+<robot name="fr10_v5">
+  <link name="base_link">
+    <visual><origin xyz="0.000000 0.000000 0.000000" rpy="0.000000000 0.000000000 0.000000000"/><geometry><mesh filename="meshes/base_link.stl" scale="1 1 1"/></geometry><material name="grey"><color rgba="0.55 0.57 0.60 1"/></material></visual>
+    <collision><origin xyz="0.000000 0.000000 0.000000" rpy="0.000000000 0.000000000 0.000000000"/><geometry><mesh filename="meshes/base_link.stl" scale="1 1 1"/></geometry></collision>
+  </link>
+  <link name="shoulder_link">
+    <visual><origin xyz="0.000000 0.000000 0.000000" rpy="0.000000000 0.000000000 0.000000000"/><geometry><mesh filename="meshes/shoulder_link.stl" scale="1 1 1"/></geometry><material name="white"><color rgba="0.92 0.93 0.94 1"/></material></visual>
+    <collision><origin xyz="0.000000 0.000000 0.000000" rpy="0.000000000 0.000000000 0.000000000"/><geometry><mesh filename="meshes/shoulder_link.stl" scale="1 1 1"/></geometry></collision>
+  </link>
+  <link name="upperarm_link">
+    <visual><origin xyz="0.000000 0.000000 0.000000" rpy="0.000000000 0.000000000 1.570796327"/><geometry><mesh filename="meshes/upperarm_link.stl" scale="1 1 1"/></geometry><material name="white"><color rgba="0.92 0.93 0.94 1"/></material></visual>
+    <collision><origin xyz="0.000000 0.000000 0.000000" rpy="0.000000000 0.000000000 1.570796327"/><geometry><mesh filename="meshes/upperarm_link.stl" scale="1 1 1"/></geometry></collision>
+  </link>
+  <link name="forearm_link">
+    <visual><origin xyz="0.000000 0.000000 0.045000" rpy="0.000000000 0.000000000 0.000000000"/><geometry><mesh filename="meshes/forearm_link.stl" scale="1 1 1"/></geometry><material name="white"><color rgba="0.92 0.93 0.94 1"/></material></visual>
+    <collision><origin xyz="0.000000 0.000000 0.045000" rpy="0.000000000 0.000000000 0.000000000"/><geometry><mesh filename="meshes/forearm_link.stl" scale="1 1 1"/></geometry></collision>
+  </link>
+  <link name="wrist1_link">
+    <visual><origin xyz="0.000000 0.000000 0.045000" rpy="0.000000000 0.000000000 1.570796327"/><geometry><mesh filename="meshes/wrist1_link.stl" scale="1 1 1"/></geometry><material name="white"><color rgba="0.92 0.93 0.94 1"/></material></visual>
+    <collision><origin xyz="0.000000 0.000000 0.045000" rpy="0.000000000 0.000000000 1.570796327"/><geometry><mesh filename="meshes/wrist1_link.stl" scale="1 1 1"/></geometry></collision>
+  </link>
+  <link name="wrist2_link">
+    <visual><origin xyz="0.000000 0.000000 0.000000" rpy="0.000000000 0.000000000 0.000000000"/><geometry><mesh filename="meshes/wrist2_link.stl" scale="1 1 1"/></geometry><material name="white"><color rgba="0.92 0.93 0.94 1"/></material></visual>
+    <collision><origin xyz="0.000000 0.000000 0.000000" rpy="0.000000000 0.000000000 0.000000000"/><geometry><mesh filename="meshes/wrist2_link.stl" scale="1 1 1"/></geometry></collision>
+  </link>
+  <link name="wrist3_link">
+    <visual><origin xyz="0.000000 0.000000 0.000000" rpy="0.000000000 0.000000000 0.000000000"/><geometry><mesh filename="meshes/wrist3_link.stl" scale="1 1 1"/></geometry><material name="grey"><color rgba="0.55 0.57 0.60 1"/></material></visual>
+    <collision><origin xyz="0.000000 0.000000 0.000000" rpy="0.000000000 0.000000000 0.000000000"/><geometry><mesh filename="meshes/wrist3_link.stl" scale="1 1 1"/></geometry></collision>
+  </link>
+  <link name="flange"/>
+  <joint name="j1" type="revolute">
+    <parent link="base_link"/><child link="shoulder_link"/>
+    <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000000 0.000000000 0.000000000"/><axis xyz="0 0 1"/>
+    <limit lower="-3.0543" upper="3.0543" effort="150" velocity="3.15"/>
+  </joint>
+  <joint name="j2" type="revolute">
+    <parent link="shoulder_link"/><child link="upperarm_link"/>
+    <origin xyz="0.000000 0.000000 0.180000" rpy="1.570796327 0.000000000 0.000000000"/><axis xyz="0 0 1"/>
+    <limit lower="-4.6251" upper="1.4835" effort="150" velocity="3.15"/>
+  </joint>
+  <joint name="j3" type="revolute">
+    <parent link="upperarm_link"/><child link="forearm_link"/>
+    <origin xyz="-0.700000 0.000000 0.000000" rpy="0.000000000 0.000000000 0.000000000"/><axis xyz="0 0 1"/>
+    <limit lower="-2.8274" upper="2.8274" effort="150" velocity="3.15"/>
+  </joint>
+  <joint name="j4" type="revolute">
+    <parent link="forearm_link"/><child link="wrist1_link"/>
+    <origin xyz="-0.586000 0.000000 0.000000" rpy="0.000000000 0.000000000 0.000000000"/><axis xyz="0 0 1"/>
+    <limit lower="-4.6251" upper="1.4835" effort="150" velocity="3.15"/>
+  </joint>
+  <joint name="j5" type="revolute">
+    <parent link="wrist1_link"/><child link="wrist2_link"/>
+    <origin xyz="0.000000 0.000000 0.195000" rpy="1.570796327 0.000000000 0.000000000"/><axis xyz="0 0 1"/>
+    <limit lower="-3.0543" upper="3.0543" effort="150" velocity="3.15"/>
+  </joint>
+  <joint name="j6" type="revolute">
+    <parent link="wrist2_link"/><child link="wrist3_link"/>
+    <origin xyz="0.000000 0.000000 0.114000" rpy="-1.570796327 0.000000000 0.000000000"/><axis xyz="0 0 1"/>
+    <limit lower="-3.0543" upper="3.0543" effort="150" velocity="3.15"/>
+  </joint>
+  <joint name="flange_joint" type="fixed">
+    <parent link="wrist3_link"/><child link="flange"/><origin xyz="0.000000 0.000000 0.106000" rpy="0.000000000 0.000000000 0.000000000"/>
+  </joint>
+</robot>

@@ -1,30 +1,34 @@
 """Whole-arm collision check for the Fairino FR10 against the virtual bin (cubicle).
 
-Kinematics: standard DH, UR-style axes. The lengths were fitted to the controller's own forward
-kinematics (GetForwardKin) for 40 random joint configurations: error 0.0000 mm.
-    d1 = 180, a2 = -700, a3 = -586, d4 = 195, d5 = 114, d6 = 106 mm, no joint offsets.
+Kinematics: standard DH, UR-style axes, equal to the controller's own forward kinematics
+(GetForwardKin, checked at random joint configurations: error 0.00 mm). This robot is hardware
+V5.0: d1 = 180, a2 = -700, a3 = -586, d4 = 195, d5 = 114, d6 = 106 mm, no joint offsets.
 On start-up the model is compared with the live flange pose; if it disagrees (another robot
 type), the arm check is switched off with a warning.
 
-Links are capsules (segment + radius) between the joint frames. The upper arm and forearm of
-this arm type sit in planes offset by up to d4 along the joint-2/3 axis, so they are covered at
-0, d4/2 and d4 along that axis (conservative). Paths: joint moves (MoveJ) are straight lines in
-joint space; straight moves (MoveL) are sampled along the line with the controller's IK.
+Link shapes: the FR10 URDF in robot/fr10/ (same joints as above, Fairino's V5 meshes). Each
+link is covered by 1-3 capsules (segment + radius) fitted around its mesh (fr10/capsules.json,
+the whole mesh surface is inside them). Paths: joint moves (MoveJ) are straight lines in joint
+space; straight moves (MoveL) are sampled along the line with the controller's IK.
 """
 
 from __future__ import annotations
+
+import json
+import xml.etree.ElementTree as ET
+from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 
 FR10_DH = {"d1": 180.0, "a2": -700.0, "a3": -586.0, "d4": 195.0, "d5": 114.0, "d6": 106.0}
 _ALPHA = np.array([np.pi / 2, 0, 0, np.pi / 2, -np.pi / 2, 0])
-
-# capsule radii (mm): conservative envelopes of the FR10 housings
-RADII = {"upper arm": 80.0, "forearm": 70.0, "wrist 1": 65.0, "wrist 2": 60.0, "wrist 3": 55.0}
+FR10_DIR = Path(__file__).resolve().parent / "fr10"
+URDF_FILE = FR10_DIR / "fr10.urdf"
 
 
 def fk_frames(q_deg, dh=FR10_DH):
-    """Base frame + the 6 joint frames (4x4 each) for joint angles in degrees."""
+    """Base frame + the 6 joint frames (4x4 each, DH convention) for joint angles in degrees."""
     a = [0, dh["a2"], dh["a3"], 0, 0, 0]
     d = [dh["d1"], 0, 0, dh["d4"], dh["d5"], dh["d6"]]
     T = np.eye(4)
@@ -39,18 +43,70 @@ def fk_frames(q_deg, dh=FR10_DH):
     return frames
 
 
-def capsules(q_deg, dh=FR10_DH, extra=0.0):
-    """[(p0, p1, radius, name)] for the arm links at joint angles q_deg."""
-    F = fk_frames(q_deg, dh)
-    o = [f[:3, 3] for f in F]
+def _origin(el):
+    """4x4 (mm) of a URDF <origin xyz rpy>."""
+    T = np.eye(4)
+    if el is None:
+        return T
+    r, p, y = (float(v) for v in el.get("rpy", "0 0 0").split())
+    cr, sr, cp, sp, cy, sy = np.cos(r), np.sin(r), np.cos(p), np.sin(p), np.cos(y), np.sin(y)
+    T[:3, :3] = [[cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+                 [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+                 [-sp, cp * sr, cp * cr]]
+    T[:3, 3] = [1000.0 * float(v) for v in el.get("xyz", "0 0 0").split()]
+    return T
+
+
+@lru_cache(maxsize=1)
+def urdf_joints():
+    """[(name, parent link, child link, T_origin (mm), revolute?)] in chain order."""
     out = []
-    for name, (i, j), axis_frame in (("upper arm", (1, 2), 1), ("forearm", (2, 3), 2)):
-        z = F[axis_frame][:3, 2]                         # joint 2 / 3 axis
-        for s in (0.0, dh["d4"] / 2, dh["d4"]):
-            out.append((o[i] + s * z, o[j] + s * z, RADII[name] + extra, name))
-    out.append((o[3], o[4], RADII["wrist 1"] + extra, "wrist 1"))
-    out.append((o[4], o[5], RADII["wrist 2"] + extra, "wrist 2"))
-    out.append((o[5], o[6], RADII["wrist 3"] + extra, "wrist 3"))
+    for j in ET.parse(URDF_FILE).getroot().findall("joint"):
+        axis = j.find("axis")
+        if j.get("type") == "revolute" and axis is not None and axis.get("xyz").split() != ["0", "0", "1"]:
+            raise ValueError("fr10.urdf: joint axes must be z")
+        out.append((j.get("name"), j.find("parent").get("link"), j.find("child").get("link"),
+                    _origin(j.find("origin")), j.get("type") == "revolute"))
+    return tuple(out)
+
+
+def joint_transforms(q_deg):
+    """[(parent, child, T_parent_child)] for the URDF joints at q_deg (what TF publishes)."""
+    out, k = [], 0
+    for _, parent, child, T0, revolute in urdf_joints():
+        T = T0
+        if revolute:
+            th = np.radians(q_deg[k])
+            k += 1
+            R = np.eye(4)
+            R[:2, :2] = [[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]]
+            T = T0 @ R
+        out.append((parent, child, T))
+    return out
+
+
+def link_frames(q_deg):
+    """{link name: 4x4 in the robot base frame (mm)} from the URDF."""
+    F = {"base_link": np.eye(4)}
+    for parent, child, T in joint_transforms(q_deg):
+        F[child] = F[parent] @ T
+    return F
+
+
+@lru_cache(maxsize=1)
+def _capsule_table():
+    data = json.loads((FR10_DIR / "capsules.json").read_text())["capsules"]
+    return tuple((c["link"], np.array(c["p0"], float), np.array(c["p1"], float), float(c["r"]), c["name"])
+                 for c in data)
+
+
+def capsules(q_deg, extra=0.0):
+    """[(p0, p1, radius, name)] (robot base frame, mm) covering every moving link at q_deg."""
+    F = link_frames(q_deg)
+    out = []
+    for link, a, b, r, name in _capsule_table():
+        T = F[link]
+        out.append((T[:3, :3] @ a + T[:3, 3], T[:3, :3] @ b + T[:3, 3], r + extra, name))
     return out
 
 

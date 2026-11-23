@@ -6,13 +6,15 @@
 What it shows (topic /suction_sim/markers + /suction_sim/cloud, fixed frame base_link, metres):
   * the captured scene as a coloured point cloud (robot base frame, from the saved pick capture)
   * the board, the virtual walls (orange) and the stand below it (grey) = the cubicle
-  * the FR10 as the collision capsules used by the whole-arm check, from the fitted kinematics,
-    each link coloured by its distance to the cubicle: green > 50 mm, yellow 10-50, red < 10
+  * the real FR10 (robot/fr10/fr10.urdf: Fairino's V5 meshes on the controller's exact kinematics),
+    published as /robot_description + TF and drawn by RViz's RobotModel display
+  * see-through over it, the collision capsules of the whole-arm check, each link coloured by its
+    distance to the cubicle: green > 50 mm, yellow 10-50, red < 10
   * the suction tool, cups and wrist camera (the end-effector collision model)
   * the planned pick, looping: home -> (via) -> hover -> descend -> suction -> lift with the
     parcel -> home -> release, with the phase and the closest distance as text
 The grasp, route and clearances come from the same functions as `pick` (planner, plan_route);
-only the controller IK is replaced by a numerical IK on the fitted FR10 model.
+only the controller IK is replaced by a numerical IK on the same FR10 kinematics.
 """
 
 from __future__ import annotations
@@ -249,16 +251,13 @@ def robot_markers(mf, scene, q, phase, attached, T_grip_parcel, parcel_size, ee,
     walls = scene["walls"]
     worst = (np.inf, "-")
     link_d = {}
-    for p0, p1, r, name in arm.capsules(q):              # conservative check (all side offsets)
+    for p0, p1, r, name in arm.capsules(q):              # the same check as the real pick
         d = float((arm.seg_distance(walls, p0, p1) - r).min()) if walls is not None else np.inf
         link_d[name] = min(link_d.get(name, np.inf), d)
         worst = min(worst, (d, name))
-    groups = {}
-    for p0, p1, r, name in arm.capsules(q):
-        groups.setdefault(name, []).append((p0, p1, r))
-    for name, copies in groups.items():                   # display: the middle copy of each link only
-        p0, p1, r = copies[len(copies) // 2]
-        out += mf.capsule("arm", mid, p0, p1, r, _color(link_d[name]))
+    for p0, p1, r, name in arm.capsules(q):              # see-through over the URDF meshes
+        d = link_d[name]                                  # faint when clear, visible when close
+        out += mf.capsule("arm collision capsules", mid, p0, p1, r, _color(d)[:3] + (0.08 if d >= 50 else 0.4,))
         mid += 3
     F = arm.fk_frames(q)
     T_tool = F[-1] @ scene["T_fg"]
@@ -291,6 +290,28 @@ def robot_markers(mf, scene, q, phase, attached, T_grip_parcel, parcel_size, ee,
                        color=(1, 1, 1, 1), text=txt))
     _ = T_to_pose
     return out, worst
+
+
+def robot_description():
+    """fr10.urdf with absolute file:// mesh paths (RViz loads the meshes from the repo)."""
+    from suction_pick.robot.arm import FR10_DIR, URDF_FILE
+    return URDF_FILE.read_text().replace('filename="meshes/', f'filename="file://{FR10_DIR}/meshes/')
+
+
+def joint_tf(q, stamp):
+    """TransformStamped for every URDF joint at joint angles q (deg)."""
+    from geometry_msgs.msg import TransformStamped
+    from scipy.spatial.transform import Rotation
+    from suction_pick.robot import arm
+    out = []
+    for parent, child, T in arm.joint_transforms(q):
+        t = TransformStamped()
+        t.header.stamp, t.header.frame_id, t.child_frame_id = stamp, parent, child
+        t.transform.translation.x, t.transform.translation.y, t.transform.translation.z = (T[:3, 3] / 1000).tolist()
+        x, y, z, w = Rotation.from_matrix(T[:3, :3]).as_quat()
+        t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w = x, y, z, w
+        out.append(t)
+    return out
 
 
 def cloud_msg(scene, header, hide_box=None):
@@ -336,8 +357,18 @@ Visualization Manager:
       Style: Points
       Size (Pixels): 2
       Color Transformer: RGB8
+    - Class: rviz_default_plugins/RobotModel
+      Name: FR10 (URDF)
+      Enabled: true
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+        Durability Policy: Transient Local
+      Visual Enabled: true
+      Collision Enabled: false
+      Alpha: 1
     - Class: rviz_default_plugins/MarkerArray
-      Name: Robot, bin, parcel
+      Name: Collision capsules, tool, bin, parcel
       Enabled: true
       Topic:
         Value: /suction_sim/markers
@@ -369,7 +400,9 @@ def run(args):
     import rclpy
     from rclpy.node import Node
     from geometry_msgs.msg import TransformStamped
-    from std_msgs.msg import Header
+    from rclpy.qos import DurabilityPolicy, QoSProfile
+    from std_msgs.msg import Header, String
+    from tf2_ros import TransformBroadcaster
     from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
     from visualization_msgs.msg import Marker, MarkerArray
     from sensor_msgs.msg import PointCloud2
@@ -395,6 +428,10 @@ def run(args):
     pub_m = node.create_publisher(MarkerArray, "/suction_sim/markers", 10)
     pub_c = node.create_publisher(PointCloud2, "/suction_sim/cloud", 1)
     tf = StaticTransformBroadcaster(node)
+    tf_arm = TransformBroadcaster(node)
+    pub_d = node.create_publisher(String, "/robot_description",
+                                  QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+    pub_d.publish(String(data=robot_description()))
     t = TransformStamped()
     t.header.stamp = node.get_clock().now().to_msg()
     t.header.frame_id, t.child_frame_id = "world", "base_link"
@@ -437,6 +474,7 @@ def run(args):
                 hdr.frame_id, hdr.stamp = "base_link", node.get_clock().now().to_msg()
                 pub_c.publish(cloud_msg(scene, hdr, (Tp, psize) if (picked and scene["chosen"]) else None))
                 last_cloud = time.monotonic()
+            tf_arm.sendTransform(joint_tf(q, node.get_clock().now().to_msg()))
             ms, worst = robot_markers(mf, scene, q, phase, attached, T_grip_parcel, psize, ee, params)
             worst_all = min(worst_all, worst)
             arr = MarkerArray()
@@ -454,6 +492,9 @@ def run(args):
     finally:
         if rviz is not None and rviz.poll() is None:
             rviz.terminate()
-        node.destroy_node()
-        rclpy.shutdown()
+        try:                                              # a second Ctrl+C here must not print a traceback
+            node.destroy_node()
+            rclpy.try_shutdown()
+        except KeyboardInterrupt:
+            pass
     return 0
