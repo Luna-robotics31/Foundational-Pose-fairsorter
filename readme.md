@@ -27,7 +27,10 @@ cd FoundationPose
 source .venv/bin/activate
 cd suction_pick
 
-python run.py bin              # detect the table / bin (robot does not move)
+python run.py bin              # window: pick the bin, then Enter to save (robot does not move)
+                               #   Enter = auto surface, 1-9 = other surface,
+                               #   M = click the 4 bin corners, R = redo clicks, Q = quit
+python run.py bin --auto       # no window: largest surface fully in view
 python run.py pick             # dry run: plans the pick, nothing moves
 python run.py sim              # watch the planned pick in RViz
 python run.py pick --execute   # pick one parcel (type y to confirm)

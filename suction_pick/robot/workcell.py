@@ -1,8 +1,10 @@
 """Virtual bin: the board (cubicle floor) outline with walls of a chosen height.
 
-`python run.py bin` measures the board once from the camera: the largest plane in view is the
-board; its points give a rectangle (minimum-area box in the board plane). The 4 corners are
-saved in ROBOT BASE coordinates (bin.json). At every pick, walls are generated along the 4 edges
+`python run.py bin` measures the board once from the camera: every large horizontal plane is a
+candidate, each gives a rectangle (minimum-area box in its plane), and the largest one fully in
+view is proposed. In the window (app/bin_ui.py) the user accepts it, picks another one, or clicks
+the 4 corners by hand. The 4 corners are saved in ROBOT BASE coordinates (bin.json). At every
+pick, walls are generated along the 4 edges
 from the board surface up to --bin_height (default 100 mm) and added to the obstacle points, so
 the end-effector collision check keeps the cups, tool body, wrist and camera out of them and the
 hover point goes above the rim.
@@ -82,50 +84,91 @@ def _rectangle(points_cam, n, c, K, tol, max_range, edge_px):
     return corners, float(hi1 - lo1), float(hi2 - lo2), cut
 
 
-def measure_board(points_cam: np.ndarray, K: np.ndarray, T_base_cam: np.ndarray,
-                  max_range: float = 2500.0, tol: float = 6.0, edge_px: int = 6):
-    """Rectangle of the table / board, plus the floor height below it if seen.
+def find_surfaces(points_cam: np.ndarray, K: np.ndarray, T_base_cam: np.ndarray,
+                  max_range: float = 2500.0, tol: float = 6.0, edge_px: int = 6, verbose: bool = True):
+    """All large horizontal surfaces in view, and which one is automatically taken as the table.
 
-    The table = the LARGEST horizontal surface whose whole outline is inside the image:
-      * the floor around a table runs off the image -> never chosen;
-      * a box or parcel standing on the table is smaller than the table -> not chosen.
-    If no surface is fully in view, the nearest surface covering >= 20 % of the view is used and
-    its cut sides are reported.
-
-    Returns dict: corners_base (4, 3), normal_base (up), size_mm (long, short), cut_sides
-    (rectangle sides that run outside the image, i.e. not fully seen), floor_z, inlier fraction.
+    Returns (candidates, auto_index). Each candidate: n, c (plane n.p = c, camera frame), share
+    of the view, rms, rect = (corners_cam (4, 3), length, width, cut sides), z (robot base).
+    Automatic choice = the LARGEST surface whose outline is fully inside the image (the floor
+    runs out of the image; a box or parcel on the table is smaller). If none is fully in view:
+    the nearest surface covering >= 20 % of the view.
     """
-    planes = find_planes(points_cam, max_range, tol)
     cands = []
-    for n_, c_, share, rms_ in planes:               # horizontal planes in the robot frame
+    for n_, c_, share, rms_ in find_planes(points_cam, max_range, tol):
         nb_ = T_base_cam[:3, :3] @ n_
-        if abs(nb_[2]) <= np.cos(np.radians(30)):
+        if abs(nb_[2]) <= np.cos(np.radians(30)):              # keep horizontal surfaces only
             continue
         rect = _rectangle(points_cam, n_, c_, K, tol, max_range, edge_px)
         if rect is None:
             continue
-        z_ = (T_base_cam[:3, :3] @ (c_ * n_) + T_base_cam[:3, 3])[2]
-        print(f"[BIN] flat surface: {rect[1]:.0f} x {rect[2]:.0f} mm, {share:.0%} of the view, z {z_:.0f} mm, "
-              f"{'fully in view' if not rect[3] else 'runs out of the image'}")
+        z_ = float((T_base_cam[:3, :3] @ (c_ * n_) + T_base_cam[:3, 3])[2])
         cands.append({"n": n_, "c": c_, "share": share, "rms": rms_, "rect": rect, "z": z_})
     if not cands:
         raise RuntimeError("No large horizontal surface in view.")
-    complete = [t for t in cands if not t["rect"][3]]
+    complete = [i for i, t in enumerate(cands) if not t["rect"][3]]
     if complete:
-        table = max(complete, key=lambda t: t["rect"][1] * t["rect"][2])
+        auto = max(complete, key=lambda i: cands[i]["rect"][1] * cands[i]["rect"][2])
     else:
-        big = [t for t in cands if t["share"] >= 0.20] or cands
-        table = min(big, key=lambda t: abs(t["c"]))
-    n, frac, rms = table["n"], table["share"], table["rms"]
-    corners_cam, w, h, cut = table["rect"]
-    lower = [t["z"] for t in cands if t["z"] < table["z"] - 50]   # >= 50 mm below the table = the floor
-    floor_z = float(min(lower)) if lower else None
+        big = [i for i, t in enumerate(cands) if t["share"] >= 0.20] or list(range(len(cands)))
+        auto = min(big, key=lambda i: abs(cands[i]["c"]))
+    if verbose:
+        for i, t in enumerate(cands):
+            print(f"[BIN] surface {i + 1}: {t['rect'][1]:.0f} x {t['rect'][2]:.0f} mm, {t['share']:.0%} of the view, "
+                  f"z {t['z']:.0f} mm, {'fully in view' if not t['rect'][3] else 'runs out of the image'}"
+                  f"{'   <- automatic choice' if i == auto else ''}")
+    return cands, auto
+
+
+def _floor_below(cands, table_z):
+    lower = [t["z"] for t in cands if t["z"] < table_z - 50]   # >= 50 mm below the table = the floor
+    return float(min(lower)) if lower else None
+
+
+def _board(corners_cam, n_cam, T_base_cam, cut, frac, rms, floor_z, source):
     corners_base = (T_base_cam[:3, :3] @ corners_cam.T).T + T_base_cam[:3, 3]
-    nb = T_base_cam[:3, :3] @ n
+    nb = T_base_cam[:3, :3] @ n_cam
     nb = -nb if nb[2] < 0 else nb                             # up
-    return {"corners_base": corners_base, "normal_base": nb, "size_mm": sorted([float(w), float(h)], reverse=True),
-            "cut_sides": cut, "board_fraction": float(frac), "flatness_mm": float(rms), "floor_z": floor_z,
-            "planes_found": len(planes)}
+    sides = [float(np.linalg.norm(corners_base[(i + 1) % 4] - corners_base[i])) for i in range(4)]
+    size = sorted([(sides[0] + sides[2]) / 2, (sides[1] + sides[3]) / 2], reverse=True)
+    return {"corners_base": corners_base, "normal_base": nb, "size_mm": size, "cut_sides": cut,
+            "board_fraction": float(frac), "flatness_mm": float(rms), "floor_z": floor_z, "source": source}
+
+
+def board_from_surface(cands, index, T_base_cam):
+    """The bin = the rectangle of detected surface `index`."""
+    t = cands[index]
+    corners_cam, _, _, cut = t["rect"]
+    return _board(corners_cam, t["n"], T_base_cam, cut, t["share"], t["rms"], _floor_below(cands, t["z"]),
+                  f"detected surface {index + 1}")
+
+
+def board_from_pixels(pixels, points_cam, K, T_base_cam, cands=(), max_range=2500.0, tol=6.0):
+    """The bin = the 4 image points the user clicked.
+
+    The table surface is the largest plane among the depth points INSIDE the clicked outline (a
+    parcel on the table is smaller than the table), and each click becomes the 3D point where its
+    viewing ray meets that surface.
+    """
+    from suction_pick.robot.calibrate import fit_board_plane
+    px = np.asarray(pixels, float)
+    centre = px.mean(axis=0)
+    px = px[np.argsort(np.arctan2(px[:, 1] - centre[1], px[:, 0] - centre[0]))]   # convex order
+    mask = np.zeros(points_cam.shape[:2], np.uint8)
+    cv2.fillPoly(mask, [np.round(px).astype(np.int32)], 1)
+    P = np.where(mask[..., None] > 0, points_cam, np.nan)
+    n, c, frac, rms = fit_board_plane(P, max_range, tol)
+    rays = np.column_stack([(px[:, 0] - K[0, 2]) / K[0, 0], (px[:, 1] - K[1, 2]) / K[1, 1], np.ones(4)])
+    corners_cam = rays * (c / (rays @ n))[:, None]
+    z = float((T_base_cam[:3, :3] @ (c * n) + T_base_cam[:3, 3])[2])
+    return _board(corners_cam, n, T_base_cam, [], frac, rms, _floor_below(cands, z), "selected by hand (4 clicks)")
+
+
+def measure_board(points_cam: np.ndarray, K: np.ndarray, T_base_cam: np.ndarray,
+                  max_range: float = 2500.0, tol: float = 6.0, edge_px: int = 6):
+    """Automatic bin (no window): the surface find_surfaces() picks."""
+    cands, auto = find_surfaces(points_cam, K, T_base_cam, max_range, tol, edge_px)
+    return board_from_surface(cands, auto, T_base_cam)
 
 
 def save(board, path=BIN_FILE):

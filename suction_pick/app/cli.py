@@ -1,6 +1,7 @@
 """Commands of the suction pick. Start them with run.py in the suction_pick folder:
 
     python run.py demo                       # synthetic scene, no camera/robot
+    python run.py bin [--auto]                # choose the bin on the camera image -> data/bin.json
     python run.py plan [--show]               # live camera, plan only (camera frame)
     python run.py plan --replay DIR           # replay a saved capture
     python run.py pick                        # robot: plan in base frame, dry run
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import sys
@@ -226,6 +228,7 @@ def cmd_bin(args):
         depth, K, T_base_cam = np.load(d / "depth_mm.npy"), np.load(d / "K.npy"), np.load(d / "T_plan_cam.npy")
         if not d.resolve().name.startswith("pick_"):
             raise SystemExit("--replay needs a pick_* capture (saved in robot coordinates).")
+        bgr = cv2.imread(str(d / "color.png")) if (d / "color.png").exists() else None
     else:
         from cube_pick.config import CAM_TOOL, SUCTION_TOOL, TOOL_COORDS, connect_robot
         from cube_pick.robot.pick_cube import CAM_RPY_DEFAULT, Cell
@@ -236,8 +239,20 @@ def cmd_bin(args):
         cell = Cell(robot, CAM_TOOL, SUCTION_TOOL, 0.0, rpy, cam_xyz=xyz)
         cell.wait_still()
         T_base_cam = cell.flange() @ cell.T_flange_optical
-        _, depth, K = capture(args.frames)
-    b = workcell.measure_board(depth_to_points(depth, K), K, T_base_cam, args.max_range)
+        bgr, depth, K = capture(args.frames)
+    points = depth_to_points(depth, K)
+    use_window = not args.auto and bgr is not None and bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    if not args.auto and not use_window:
+        print("[BIN] No display (or no colour image): automatic choice, no window.")
+    if use_window:
+        from suction_pick.app.bin_ui import choose
+        b = choose(bgr, points, K, T_base_cam, args.max_range)
+        if b is None:
+            print("[BIN] Cancelled, nothing saved.")
+            return 1
+        print(f"[BIN] bin = {b['source']}")
+    else:
+        b = workcell.measure_board(points, K, T_base_cam, args.max_range)
     print(f"[BIN] board {b['size_mm'][0]:.0f} x {b['size_mm'][1]:.0f} mm, flatness {b['flatness_mm']:.1f} mm, "
           f"surface at z {b['corners_base'][:, 2].mean():.0f} mm")
     if b.get("floor_z") is not None:
@@ -248,7 +263,7 @@ def cmd_bin(args):
     if b["cut_sides"]:
         print(f"[BIN] side(s) {b['cut_sides']} (corner i -> i+1) run outside the camera view: there the wall "
               "is where the view ends, not at the real board edge.")
-        if not args.allow_partial:
+        if not args.allow_partial and not use_window:
             print("[BIN] NOT saved. Move the robot so the whole board is in view and run again, or add "
                   "--allow_partial to keep the visible part (safe: the robot stays inside what it saw).")
             return 1
@@ -345,6 +360,8 @@ def main(argv=None):
     sm.add_argument("--via_clearance", type=float, default=150.0)
     bn = sub.add_parser("bin", help="Measure the board outline -> virtual bin walls (robot does not move)")
     bn.add_argument("--replay", help="Measure from a saved pick_* capture instead of the live camera")
+    bn.add_argument("--auto", action="store_true",
+                    help="No window: take the automatic choice (largest surface fully in view)")
     bn.add_argument("--allow_partial", action="store_true",
                     help="Save even if a board edge is outside the camera view (wall placed where the view ends)")
     bn.add_argument("--frames", type=int, default=5)
