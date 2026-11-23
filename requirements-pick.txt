@@ -7,7 +7,7 @@
 #   * Install:     python3.10 -m venv .venv && source .venv/bin/activate
 #                  pip install -r requirements-pick.txt
 #                  pip install --no-deps pyorbbecsdk2==2.1.2      <- camera driver, see below
-#   * NOT from pip (see README.md, section "Install"):
+#   * NOT from pip (commands in readme.md):
 #       - Orbbec USB permissions: sudo bash <site-packages>/pyorbbecsdk/shared/install_udev_rules.sh
 #       - ROS 2 Humble + RViz2 (simulation only): sudo apt install ros-humble-desktop
 #         (rclpy, sensor_msgs_py, visualization_msgs, tf2_ros come from ROS, not from pip)
