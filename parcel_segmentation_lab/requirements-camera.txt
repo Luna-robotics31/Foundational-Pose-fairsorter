@@ -1,0 +1,11 @@
+-r requirements.txt
+# Optional: official Orbbec SDK v2 Python binding (module name: pyorbbecsdk).
+pyorbbecsdk2==2.1.3
+# The SDK's example dependencies pull pynput/PyObjC on macOS. PyObjC 12
+# dropped Python 3.9, but its yanked metadata can still make old pip build it.
+# Use the last Python-3.9-compatible release for this Mac's interpreter.
+pyobjc-core==11.1; sys_platform == "darwin" and python_version < "3.10"
+pyobjc-framework-Cocoa==11.1; sys_platform == "darwin" and python_version < "3.10"
+pyobjc-framework-Quartz==11.1; sys_platform == "darwin" and python_version < "3.10"
+pyobjc-framework-CoreText==11.1; sys_platform == "darwin" and python_version < "3.10"
+pyobjc-framework-ApplicationServices==11.1; sys_platform == "darwin" and python_version < "3.10"

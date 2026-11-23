@@ -16,10 +16,12 @@ import yaml
 
 
 class FoundationPose:
-  def __init__(self, model_pts, model_normals, symmetry_tfs=None, mesh=None, scorer:ScorePredictor=None, refiner:PoseRefinePredictor=None, glctx=None, debug=0, debug_dir='/home/bowen/debug/novel_pose_debug/'):
+  def __init__(self, model_pts, model_normals, symmetry_tfs=None, mesh=None, scorer:ScorePredictor=None, refiner:PoseRefinePredictor=None, glctx=None, debug=0, debug_dir=None):
     self.gt_pose = None
     self.ignore_normal_flip = True
     self.debug = debug
+    if debug_dir is None:
+      debug_dir = f'{os.path.dirname(os.path.realpath(__file__))}/debug'
     self.debug_dir = debug_dir
     os.makedirs(debug_dir, exist_ok=True)
 

@@ -1,0 +1,30 @@
+{
+  "cam_rpy": [
+    -21.8525,
+    -1.4963,
+    -179.2938
+  ],
+  "cam_xyz": [
+    8.852,
+    -58.34,
+    27.475
+  ],
+  "board_normal_base": [
+    -0.00225,
+    -0.00294,
+    0.99999
+  ],
+  "board_tilt_deg": 0.21,
+  "rotation_fit_deg_max": 0.102,
+  "poses": 9,
+  "object_scatter_mm": 6.63,
+  "object_scatter_before_mm": 6.81,
+  "leave_one_out_mean_mm": 4.45,
+  "leave_one_out_max_mm": 7.51,
+  "cam_xyz_std_mm": [
+    4.96,
+    4.96,
+    4.96
+  ],
+  "date": "2026-11-17T17:04:36"
+}
