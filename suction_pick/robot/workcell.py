@@ -12,17 +12,16 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from pathlib import Path
 
 import cv2
 import numpy as np
 
-BIN_FILE = Path(__file__).resolve().parent / "bin.json"
+from suction_pick.settings.paths import BIN_FILE  # data/bin.json
 
 
 def find_planes(points_cam, max_range, tol, max_planes=4, min_share=0.08):
     """Large planes in view, biggest first: [(normal towards camera, offset c, share of points, rms)]."""
-    from .calibrate import fit_board_plane
+    from suction_pick.robot.calibrate import fit_board_plane
     P = points_cam.copy()
     finite = np.isfinite(points_cam).all(axis=2) & (np.nan_to_num(points_cam[..., 2], nan=1e9) <= max_range)
     total = max(int(finite.sum()), 1)

@@ -8,16 +8,26 @@ small objects that are picked together.
 
 ```
 suction_pick/
-├── __main__.py / cli.py   python -m suction_pick demo | plan | pick
-├── config.py              gripper geometry and every tuning parameter
-├── affordance.py          where ONE cup can seal (stands in for the paper's SG-U-Net++)
-├── planner.py             the paper's multi-cup planner (voxels, kernels, ranking) + collision check
-├── geometry.py            depth -> points, frames
-├── camera.py              Gemini 2 capture (reuses cube_pick's V4L2 camera code)
-├── robot.py               Fairino pick sequence (reuses cube_pick's camera->robot calibration)
-├── visualize.py           overlay of graspable regions and planned cups
-├── synthetic.py           test scene with known answers
-└── tests/test_planner.py  offline tests
+├── run.py                 the ONLY entry point:  python run.py demo | io | plan | bin | calibrate | pick | sim
+├── app/cli.py             the commands and their options
+├── settings/config.py     gripper geometry and every tuning parameter
+├── settings/paths.py      where data/ and output/ files are kept
+├── vision/camera.py       Gemini 2 capture (reuses cube_pick's V4L2 camera code)
+├── vision/geometry.py     depth -> points, frames
+├── vision/affordance.py   where ONE cup can seal (stands in for the paper's SG-U-Net++)
+├── vision/visualize.py    overlay of graspable regions, planned cups, obstacles
+├── planning/planner.py    the paper's multi-cup planner (voxels, kernels, ranking) + collision check
+├── robot/pick.py          Fairino pick sequence, route check, suction outputs
+├── robot/arm.py           FR10 kinematics (fitted to the controller) + whole-arm collision model
+├── robot/fence.py         live virtual-wall monitor during motion
+├── robot/workcell.py      table measurement -> virtual bin walls
+├── robot/calibrate.py     camera calibration (rotation + position)
+├── robot/io_test.py       digital-output test (python run.py io)
+├── sim/rviz.py            RViz2 simulation (python run.py sim)
+├── sim/synthetic.py       test scenes with known answers
+├── data/                  bin.json, camera_calibration.json (saved setup for this robot / table)
+├── tests/test_planner.py  offline tests
+└── output/                one folder per run (git-ignored)
 ```
 
 ## How it works
@@ -93,7 +103,7 @@ python run.py sim --capture output/pick_YYYYMMDD_HHMMSS --bin_height 150 --arm_m
 ```
 
 Runs the **real planning code** on a saved capture (the grasp planner, the virtual walls from
-`bin.json`, `plan_route` for the whole arm) and animates the pick in a loop: home → (via) → hover →
+`data/bin.json`, `plan_route` for the whole arm) and animates the pick in a loop: home → (via) → hover →
 straight down → suction → lift with the parcel → home → release. The controller IK is replaced by
 a numerical IK on the fitted FR10 model (`arm.py`, matches the controller to 0.0000 mm).
 
@@ -107,27 +117,26 @@ parcel being carried, and the current phase with the closest distance. Topics:
 
 ```bash
 source /home/shashank/Projects/spark_src/.venv/bin/activate
-cd /home/shashank/Projects/FoundationPose
+cd /home/shashank/Projects/FoundationPose/suction_pick
 
-python -m suction_pick demo --show            # synthetic scene, prints PASS/FAIL
-python -m suction_pick plan --show            # live camera, plan only (no robot)
-python -m suction_pick plan --replay suction_pick/output/plan_XXXX   # re-plan a saved capture
+python run.py demo --show                         # synthetic scene, prints PASS/FAIL
+python run.py plan --show                         # live camera, plan only (no robot)
+python run.py plan --replay output/pick_XXXX      # re-plan a saved capture
 
-# robot: arm at a look pose above the objects (camera = tool 5, suction gripper = tool 1)
-python -m suction_pick pick                                      # dry run: plan + IK check, no motion
-python -m suction_pick pick --vacuum_do 2 --execute              # pick ONE parcel, hold it, go home
-python -m suction_pick pick --vacuum_do 2 --execute --place 300 0 200 180 0 0
-python -m unittest discover -s suction_pick/tests -t . -v        # offline tests
+# robot: arm at the home pose above the table (camera = tool 5, suction gripper = tool 1)
+python run.py bin                                 # measure the table -> virtual bin (no motion)
+python run.py pick                                # dry run: plan + route check, no motion
+python run.py sim                                 # RViz2 replay of the dry run
+python run.py pick --execute                      # pick ONE parcel (DO0 suction, DO1 release), go home
+python run.py pick --execute --place 300 0 200 180 0 0
+cd .. && python -m unittest discover -s suction_pick/tests -t . -v   # offline tests
 ```
-
-From **inside** the `suction_pick` folder, use `python run.py` instead of
-`python -m suction_pick`, e.g. `python run.py pick --vacuum_do 2 --execute`.
 
 Every run writes `suction_pick/output/<run>/`: `overlay.png` (graspable regions + top
 grasps; a crossed circle means that cup is off), `affordance.png`, and `grasps.json`
 (TCP, cup positions, normal, tool rotation, scores). Live runs also save `color.png`,
 `depth_mm.npy`, `K.npy` and `T_plan_cam.npy`, so they can be replayed. Only the **newest 5 runs** are kept: older
-run folders are deleted automatically after each run (`KEEP_RUNS` in `cli.py`).
+run folders are deleted automatically after each run (`KEEP_RUNS` in `app/cli.py`).
 
 The gripper defaults to **2 cups, 70 mm apart, Ø30 mm**, along the tool X axis. Change this with
 `--cup_spacing`, `--cup_diameter`, or `--cups "x,y;x,y;..."` for other layouts.
@@ -141,7 +150,7 @@ and room behind the table never count; at home the table is ~0.73 m away, the fl
 `--min_points`.
 
 **Robot requirements:** automatic mode; tool numbers are `CAM_TOOL = 5` and `SUCTION_TOOL = 1`
-in `config.py` (override with `--cam_tool` / `--suction_tool`). Any tool may be active on the
+in `cube_pick/config.py` (override with `--cam_tool` / `--suction_tool`). Any tool may be active on the
 pendant. The suction tool's TCP must be set on the controller
 at the **midpoint between the cups, in the cup-lip plane, Z pointing out of the gripper**.
 Ctrl+C sends `StopMotion` and leaves the vacuum as it is, so a held object isn't dropped.

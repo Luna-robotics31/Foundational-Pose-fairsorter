@@ -19,8 +19,8 @@ from cube_pick.robot.home_pos import HOME_POSE, home_joints, home_pos
 from cube_pick.robot.pick_cube import (CAM_RPY_DEFAULT, VEL_DESCEND, VEL_LIFT, VEL_TRAVEL,
                                        Cell, T_to_pose, call, pose_to_T)
 
-from .geometry import depth_to_points, transform
-from .fence import Fence, FenceStop
+from suction_pick.vision.geometry import depth_to_points, transform
+from suction_pick.robot.fence import Fence, FenceStop
 
 
 def tool_pose(position, R_tool):
@@ -93,7 +93,7 @@ class Vacuum:
 
 def measure_and_plan(cell, args, plan_fn):
     """Capture at the current pose and plan in the base frame."""
-    from .camera import capture
+    from suction_pick.vision.camera import capture
     cell.wait_still()
     T_base_cam = cell.flange() @ cell.T_flange_optical  # mm, valid while the arm is still
     bgr, depth, K = capture(args.frames)
@@ -104,7 +104,7 @@ def measure_and_plan(cell, args, plan_fn):
 def equivalent_grasps(g):
     """The grasp, plus the same grasp turned 180 deg about the approach axis if the cup layout
     is symmetric (e.g. 2 identical cups): same cups on the same spots, different wrist angle."""
-    from .planner import Grasp
+    from suction_pick.planning.planner import Grasp
     if not g.terms.get("turned_clear", True):           # turned version would hit something
         return [g]
     local = (g.cups - g.tcp) @ g.R                       # cup offsets in the gripper frame
@@ -147,7 +147,8 @@ def make_arm_walls(robot, args):
     """Cubicle walls for the whole-arm check, or None (no bin / --no_bin / --no_arm_check / wrong model)."""
     if args.no_bin or args.no_arm_check:
         return None
-    from . import arm, workcell
+    from suction_pick.robot import arm
+    from suction_pick.robot import workcell
     bin_ = workcell.load()
     if bin_ is None:
         return None
@@ -164,7 +165,7 @@ def plan_route(cell, wps, q_start, q_home, walls, args):
     Returns (waypoints, report) or (None, reason)."""
     if walls is None:
         return wps, ["whole-arm check off (no bin.json, --no_bin or --no_arm_check)"]
-    from . import arm
+    from suction_pick.robot import arm
 
     def check(w):
         lines, worst = [], np.inf
@@ -218,9 +219,9 @@ def make_fence(robot, cell, args):
         print("[FENCE] off (--no_bin)")
         return None
     from cube_pick.config import ROBOT_IP
-    from . import workcell
-    from .cli import build_config
-    from .planner import ee_model
+    from suction_pick.robot import workcell
+    from suction_pick.app.cli import build_config
+    from suction_pick.planning.planner import ee_model
     bin_ = workcell.load()
     if bin_ is None:
         print("[FENCE] off: no bin.json (measure the board with:  python run.py bin)")
@@ -255,7 +256,7 @@ def run(args, plan_fn):
         print(f"[ROBOT] Mode: {'automatic' if st.robot_mode == 0 else 'manual'} "
               "(dry run: left as it is; --execute switches to automatic)")
     from cube_pick.config import TOOL_COORDS
-    from .calibrate import load_cam_calib
+    from suction_pick.robot.calibrate import load_cam_calib
     cam_rpy, cam_xyz, source = load_cam_calib(CAM_RPY_DEFAULT, TOOL_COORDS[args.cam_tool][:3])
     print(f"[CAM] camera calibration from {source}: rpy {np.round(cam_rpy, 2).tolist()}, "
           f"xyz {np.round(cam_xyz, 1).tolist()}")

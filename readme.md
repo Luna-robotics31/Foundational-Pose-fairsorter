@@ -39,27 +39,40 @@ If you are new here, follow this file from top to bottom. Every command below is
 
 | Folder / file | What it is |
 |---|---|
-| **`suction_pick/`** | **The suction pick.** Everything in this README. Run it from inside this folder with `python run.py …` |
+| **`suction_pick/`** | **The suction pick.** Everything in this README. Only `run.py` is run: `python run.py <command>` from inside this folder |
 | `cube_pick/` | Shared robot and camera code used by the suction pick (robot connection, tool data, home pose, camera driver, Fairino SDK in `cube_pick/robot/fairino_driver/`), plus the older FoundationPose cube pick (section 14) |
 | `requirements-pick.txt` | Python packages for the suction pick |
 | `requirements.txt` | FoundationPose's own packages (only for the cube pick) |
 | `wield_test/`, `parcel_segmentation_lab/` | Separate experiments (section 14) |
 | `estimater.py`, `learning/`, `mycpp/`, `weights/`, … | The FoundationPose 6D pose model (NVIDIA); only the cube pick uses it |
 
-Inside `suction_pick/`:
+Inside `suction_pick/` **only `run.py` is run**. Everything else is in folders:
 
-| File | Purpose |
+```
+suction_pick/
+├── run.py        <- the only entry point:  python run.py <command>
+├── README.md     design notes of the suction pick
+├── app/          cli.py: the commands (demo, io, plan, bin, calibrate, pick, sim)
+├── settings/     config.py: gripper / planner / vision parameters;  paths.py: where files are kept
+├── vision/       camera.py (Gemini 2), geometry.py, affordance.py (where a cup can seal), visualize.py
+├── planning/     planner.py: multi-cup grasp planner (after Jiang et al., arXiv:2304.10693)
+├── robot/        pick.py (pick sequence), arm.py (FR10 model, whole-arm check), fence.py (live wall
+│                 monitor), workcell.py (bin), calibrate.py (camera calibration), io_test.py (DO test)
+├── sim/          rviz.py (RViz2 simulation), synthetic.py (test scenes)
+├── data/         bin.json, camera_calibration.json: saved setup, SPECIFIC to this robot and table
+├── tests/        offline tests
+└── output/       one folder per run: images, depth, overlay.png, grasps.json (newest 5 kept, not in git)
+```
+
+| Command (from `suction_pick/`) | What it does |
 |---|---|
-| `run.py` | Entry point: `python run.py demo \| plan \| bin \| calibrate \| sim \| pick` |
-| `affordance.py`, `planner.py` | Finds where the cups can seal and plans the grasp (after Jiang et al., arXiv:2304.10693) |
-| `workcell.py` | Measures the table and builds the virtual bin walls |
-| `arm.py`, `fence.py` | Whole-arm collision model of the FR10 and the live wall monitor |
-| `robot.py` | Pick sequence on the robot (moves, suction outputs, home) |
-| `calibrate.py` | Camera calibration |
-| `sim_rviz.py` | RViz2 simulation |
-| `suction_activate.py` | Switches one digital output on and off (to test the suction) |
-| `bin.json`, `camera_calibration.json` | Saved bin and camera calibration (**specific to this robot and table**: redo them for yours) |
-| `output/` | One folder per run: images, depth, `overlay.png`, `grasps.json` (newest 5 kept) |
+| `python run.py demo` | Synthetic test scene, no robot or camera |
+| `python run.py io` | Switches one digital output on and off (test the suction / release) |
+| `python run.py plan` | Camera only: finds parcels and plans, no robot |
+| `python run.py bin` | Measures the table and saves the virtual bin (robot does not move) |
+| `python run.py calibrate` | Camera calibration (robot moves) |
+| `python run.py pick` | Dry run on the robot (nothing moves); add `--execute` to pick |
+| `python run.py sim` | RViz2 simulation of the last dry run |
 
 ---
 
@@ -162,8 +175,8 @@ All commands from here on are run **from the `suction_pick` folder** with the en
 | Robot answers | `ping -c 3 192.168.58.2` | replies |
 | Robot readout (no motion) | `python -m cube_pick.robot.home_pos`; if it asks to move, answer **`n`** | prints `[HOME] flange now [...]` and the home pose |
 | Camera (no robot) | `python run.py plan --show` | a window with the colour image, graspable areas and planned cups (Q closes it) |
-| Release output | `python suction_activate.py` | `control box DO1 ... now: 1`, then off after 2 s |
-| Suction output | `python suction_activate.py --do 0` | the suction runs for 2 s |
+| Release output | `python run.py io` | `control box DO1 ... now: 1`, then off after 2 s |
+| Suction output | `python run.py io --do 0` | the suction runs for 2 s |
 
 `python -m cube_pick.robot.home_pos` works from the repository root. From `suction_pick/`, run it as
 `(cd .. && python -m cube_pick.robot.home_pos)`.
@@ -193,7 +206,7 @@ gripper is taken off, moved or re-mounted. It is **not** needed when you change 
    [CALIB] Saved camera_calibration.json ...
    ```
 
-The result is saved in `suction_pick/camera_calibration.json`, and every pick uses it.
+The result is saved in `suction_pick/data/camera_calibration.json`, and every pick uses it.
 
 ---
 
@@ -221,12 +234,12 @@ to this pose.
 ### 6.3 Measure the table: this creates the bin
 
 ```bash
-cp bin.json bin_previous.json      # optional: keep the old bin
+cp data/bin.json data/bin_previous.json      # optional: keep the old bin
 python run.py bin
 ```
 
 The program takes the **nearest large flat surface** as the table, not the floor around it, and
-saves `bin.json`. Example output:
+saves `data/bin.json`. Example output:
 
 ```
 [BIN] board 563 x 453 mm, flatness 2.1 mm, surface at z -353 mm
@@ -365,11 +378,12 @@ New table or table moved → section 6 first. Camera or gripper re-mounted → s
 |---|---|
 | Robot IP, tool numbers, tool coordinates | `cube_pick/config.py` (`ROBOT_IP`, `CAM_TOOL = 5`, `SUCTION_TOOL = 1`, `TOOL_COORDS`) |
 | Home pose (flange pose) | `cube_pick/robot/home_pos.py` (`HOME_POSE`) |
-| Bin (table outline, height, floor) | `suction_pick/bin.json`, written by `python run.py bin` |
-| Camera calibration | `suction_pick/camera_calibration.json`, written by `python run.py calibrate` |
-| Gripper and planner defaults | `suction_pick/config.py` |
+| Bin (table outline, height, floor) | `suction_pick/data/bin.json`, written by `python run.py bin` |
+| Camera calibration | `suction_pick/data/camera_calibration.json`, written by `python run.py calibrate` |
+| Gripper and planner defaults | `suction_pick/settings/config.py` |
+| Where files are kept | `suction_pick/settings/paths.py` |
 | Robot speeds (travel 20 %, descend 8 %, lift 15 %) | `VEL_TRAVEL`, `VEL_DESCEND`, `VEL_LIFT` in `cube_pick/robot/pick_cube.py` |
-| Run results | `suction_pick/output/pick_<time>/` (newest 5 kept; `KEEP_RUNS` in `suction_pick/cli.py`) |
+| Run results | `suction_pick/output/pick_<time>/` (newest 5 kept; `KEEP_RUNS` in `suction_pick/app/cli.py`) |
 
 ---
 

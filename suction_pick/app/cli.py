@@ -1,11 +1,11 @@
-"""Command line: demo | plan | pick.  Run from the FoundationPose folder:
+"""Commands of the suction pick. Start them with run.py in the suction_pick folder:
 
-    python -m suction_pick demo                       # synthetic scene, no camera/robot
-    python -m suction_pick plan [--show]               # live camera, plan only (camera frame)
-    python -m suction_pick plan --replay DIR           # replay a saved capture
-    python -m suction_pick pick                        # robot: plan in base frame, dry run
-    python -m suction_pick pick --execute             # suction DO0, release DO1 (2 s pulse)
-(camera = tool 5, suction gripper = tool 1: see CAM_TOOL / SUCTION_TOOL in config.py)
+    python run.py demo                       # synthetic scene, no camera/robot
+    python run.py plan [--show]               # live camera, plan only (camera frame)
+    python run.py plan --replay DIR           # replay a saved capture
+    python run.py pick                        # robot: plan in base frame, dry run
+    python run.py pick --execute             # suction DO0, release DO1 (2 s pulse)
+(camera = tool 5, suction gripper = tool 1: CAM_TOOL / SUCTION_TOOL in cube_pick/config.py)
 """
 
 from __future__ import annotations
@@ -22,13 +22,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from .affordance import compute_affordance, object_tilts
-from .config import CAM_TOOL, SUCTION_TOOL, AffordanceParams, Gripper, PlannerParams
-from .geometry import T_UP_FROM_CAMERA, depth_to_points, transform
-from .planner import plan
-from .visualize import affordance_image, overlay
+from suction_pick.vision.affordance import compute_affordance, object_tilts
+from suction_pick.settings.config import CAM_TOOL, SUCTION_TOOL, AffordanceParams, Gripper, PlannerParams
+from suction_pick.vision.geometry import T_UP_FROM_CAMERA, depth_to_points, transform
+from suction_pick.planning.planner import plan
+from suction_pick.vision.visualize import affordance_image, overlay
 
-OUT_ROOT = Path(__file__).resolve().parent / "output"
+from suction_pick.settings.paths import OUTPUT_DIR as OUT_ROOT  # suction_pick/output
 KEEP_RUNS = 5
 RUN_NAME = re.compile(r"^(demo|plan|pick)_(\d{8}_\d{6})$")
 
@@ -59,7 +59,7 @@ def build_config(args):
         cup_xy = [[float(v) for v in c.split(",")] for c in args.cups.split(";")]
     else:
         cup_xy = [[-args.cup_spacing / 2, 0.0], [args.cup_spacing / 2, 0.0]]
-    from .config import robot_ee_geometry
+    from suction_pick.settings.config import robot_ee_geometry
     gripper = Gripper(cup_xy=cup_xy, cup_diameter=args.cup_diameter,
                       independent_cups=args.independent_cups, body_radius=args.body_radius,
                       camera_radius=args.camera_radius, **robot_ee_geometry())
@@ -74,7 +74,7 @@ def run_pipeline(bgr, depth, K, points, T_plan_cam, args, out_dir: Path):
     gripper, aff_params, plan_params = build_config(args)
     walls, bin_, table, region = None, None, None, None
     if args.frame_name == "robot base frame" and not args.no_bin:   # virtual bin walls (robot coordinates)
-        from . import workcell
+        from suction_pick.robot import workcell
         bin_ = workcell.load()
         if bin_ is None:
             print("[BIN] No bin.json: no virtual walls. Measure the board with:  python run.py bin")
@@ -127,7 +127,7 @@ def run_pipeline(bgr, depth, K, points, T_plan_cam, args, out_dir: Path):
     img = overlay(bgr, surface, grasps, K, T_cam_plan, gripper.cup_radius, tilts,
                   gripper=gripper, params=plan_params)
     if bin_ is not None:
-        from . import workcell
+        from suction_pick.robot import workcell
         workcell.draw(img, bin_, args.bin_height, K, T_cam_plan)
     cv2.imwrite(str(out_dir / "overlay.png"), img)
     cv2.imwrite(str(out_dir / "affordance.png"), affordance_image(surface))
@@ -162,7 +162,7 @@ def stamp():
 
 # ── commands ────────────────────────────────────────────────────────────
 def cmd_demo(args):
-    from . import synthetic as S
+    from suction_pick.sim import synthetic as S
     args.frame_name = "synthetic camera-up frame"
     depth, _ = S.render()
     gray = cv2.cvtColor(cv2.normalize(-depth, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8),
@@ -207,7 +207,7 @@ def cmd_plan(args):
         T_plan_cam = np.load(d / "T_plan_cam.npy")
         out = d / f"replan_{stamp()}"
     else:
-        from .camera import capture
+        from suction_pick.vision.camera import capture
         bgr, depth, K = capture(args.frames)
         T_plan_cam = T_UP_FROM_CAMERA
         out = OUT_ROOT / f"plan_{stamp()}"
@@ -220,7 +220,7 @@ def cmd_plan(args):
 
 def cmd_bin(args):
     """Measure the board rectangle in robot coordinates and save it as the virtual bin."""
-    from . import workcell
+    from suction_pick.robot import workcell
     if args.replay:
         d = Path(args.replay)
         depth, K, T_base_cam = np.load(d / "depth_mm.npy"), np.load(d / "K.npy"), np.load(d / "T_plan_cam.npy")
@@ -229,8 +229,8 @@ def cmd_bin(args):
     else:
         from cube_pick.config import CAM_TOOL, SUCTION_TOOL, TOOL_COORDS, connect_robot
         from cube_pick.robot.pick_cube import CAM_RPY_DEFAULT, Cell
-        from .calibrate import load_cam_calib
-        from .camera import capture
+        from suction_pick.robot.calibrate import load_cam_calib
+        from suction_pick.vision.camera import capture
         robot = connect_robot()
         rpy, xyz, _ = load_cam_calib(CAM_RPY_DEFAULT, TOOL_COORDS[CAM_TOOL][:3])
         cell = Cell(robot, CAM_TOOL, SUCTION_TOOL, 0.0, rpy, cam_xyz=xyz)
@@ -258,7 +258,7 @@ def cmd_bin(args):
 
 
 def cmd_pick(args):
-    from .robot import run
+    from suction_pick.robot.pick import run
     args.frame_name = "robot base frame"
     if args.release_do >= 0 and args.release_do in args.vacuum_do:
         raise SystemExit(f"DO{args.release_do} is both the suction output (--vacuum_do) and the release output "
@@ -274,7 +274,7 @@ def cmd_pick(args):
             # wrong: every grasp would land in the wrong place.
             # Compared with the board normal measured during calibration (the real board may be
             # tilted a few degrees); without a calibration, with "level" (base Z).
-            from .calibrate import CALIB_FILE
+            from suction_pick.robot.calibrate import CALIB_FILE
             ref, ref_name = np.array([0.0, 0.0, 1.0]), "level (robot base Z)"
             try:
                 ref = np.array(json.loads(CALIB_FILE.read_text())["board_normal_base"], float)
@@ -288,7 +288,7 @@ def cmd_pick(args):
                   f"by {dev:.1f} deg")
             if dev > args.max_table_tilt:
                 msg = (f"The table differs by {dev:.1f} deg from {ref_name}: the camera calibration "
-                       "does not match the robot (or the board moved). Run:  python -m suction_pick calibrate")
+                       "does not match the robot (or the board moved). Run:  python run.py calibrate")
                 if args.execute:
                     raise SystemExit(f"[ABORT] {msg}  (or --max_table_tilt if the table really is tilted)")
                 print(f"[WARNING] {msg}")
@@ -331,6 +331,8 @@ def main(argv=None):
                         help="An object counts as tilted above this many degrees")
 
     sub.add_parser("demo", parents=[common], help="Synthetic scene with known answers")
+    from suction_pick.robot import io_test
+    io_test.add_arguments(sub.add_parser("io", help="Test a digital output, e.g. the suction (DO0) or release (DO1)"))
     sm = sub.add_parser("sim", parents=[common], help="RViz2 simulation of the planned pick (no robot)")
     sm.add_argument("--capture", help="pick_* capture folder to use (default: the newest)")
     sm.add_argument("--no_rviz", action="store_true", help="Only publish the topics, do not start RViz2")
@@ -396,13 +398,16 @@ def main(argv=None):
                     help="Refuse to move if the table differs more than this (deg) from the board measured at calibration")
     pk.add_argument("--execute", action="store_true", help="Move the robot (asks for 'y')")
     args = p.parse_args(argv)
+    if args.command == "io":
+        from suction_pick.robot import io_test
+        return io_test.run(args)
     if args.command == "sim":
-        from .sim_rviz import run as sim
+        from suction_pick.sim.rviz import run as sim
         return sim(args)
     if args.command == "bin":
         return cmd_bin(args)
     if args.command == "calibrate":
-        from .calibrate import run as calibrate
+        from suction_pick.robot.calibrate import run as calibrate
         return calibrate(args)
     return {"demo": cmd_demo, "plan": cmd_plan, "pick": cmd_pick}[args.command](args)
 

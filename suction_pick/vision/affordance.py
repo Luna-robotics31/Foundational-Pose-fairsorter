@@ -21,7 +21,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from .config import AffordanceParams
+from suction_pick.settings.config import AffordanceParams
 
 
 @dataclass

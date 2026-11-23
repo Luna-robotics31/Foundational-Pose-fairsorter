@@ -1,22 +1,21 @@
-#!/usr/bin/env python3
 """Switch a Fairino digital output (e.g. the suction valve) on, check it, and switch it off.
 
-Run from the suction_pick folder (or anywhere):
-    python suction_activate.py                 # control-box DO1 on for 2 s, then off
-    python suction_activate.py --do 2          # another output
-    python suction_activate.py --tool          # tool-flange output (SetToolDO, id 0 or 1)
-    python suction_activate.py --keep_on       # leave it on
+    python run.py io                   # control-box DO1 on for 2 s, then off
+    python run.py io --do 0            # another output (DO0 = suction)
+    python run.py io --tool --do 1     # tool-flange output (SetToolDO, id 0 or 1)
+    python run.py io --keep_on         # leave it on
 The robot does not move.
 """
-import argparse
-import sys
 import time
-from pathlib import Path
 
-# Make the FoundationPose folder importable, so the bundled Fairino SDK is found
-# (cube_pick/robot/fairino_driver/Robot.py) - there is no 'fairino' package installed.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from cube_pick.config import connect_robot  # noqa: E402
+from cube_pick.config import connect_robot
+
+
+def add_arguments(p):
+    p.add_argument("--do", type=int, default=1, help="Output number (control box 0-15, tool 0-1); default 1")
+    p.add_argument("--tool", action="store_true", help="Use the tool-flange outputs (SetToolDO)")
+    p.add_argument("--seconds", type=float, default=2.0, help="How long to keep it on (default 2)")
+    p.add_argument("--keep_on", action="store_true", help="Leave the output on")
 
 
 def output_state(robot, port, tool):
@@ -29,16 +28,10 @@ def output_state(robot, port, tool):
     return None if err != 0 else (bits >> port) & 1
 
 
-def main():
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--do", type=int, default=1, help="Output number (control box 0-15, tool 0-1); default 1")
-    p.add_argument("--tool", action="store_true", help="Use the tool-flange outputs (SetToolDO)")
-    p.add_argument("--seconds", type=float, default=2.0, help="How long to keep it on (default 2)")
-    p.add_argument("--keep_on", action="store_true", help="Leave the output on")
-    args = p.parse_args()
+def run(args):
     limit = 1 if args.tool else 15
     if not 0 <= args.do <= limit:
-        p.error(f"--do must be 0-{limit}")
+        raise SystemExit(f"--do must be 0-{limit}")
 
     robot = connect_robot()                      # also waits for live status data
     name = f"{'tool' if args.tool else 'control box'} DO{args.do}"
@@ -62,7 +55,3 @@ def main():
         time.sleep(0.3)
         print(f"{name} now: {output_state(robot, args.do, args.tool)}")
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

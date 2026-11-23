@@ -72,7 +72,7 @@ def robot_ee_geometry() -> dict:
     try:
         import cube_pick.config as rc
         from cube_pick.robot.pick_cube import CAM_RPY_DEFAULT, pose_to_T
-        from .calibrate import load_cam_calib
+        from suction_pick.robot.calibrate import load_cam_calib
     except Exception:
         return {}
     T_tool_flange = np.linalg.inv(pose_to_T(rc.TOOL_COORDS[rc.SUCTION_TOOL]))   # flange -> tool, inverted

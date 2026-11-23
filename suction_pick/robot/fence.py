@@ -90,7 +90,7 @@ class _Watch:
         pose = list(st.flange_cur_pos)
         d, part, p = self.f.clearance(pose)                     # end effector vs walls
         if self.f.arm_walls is not None:                        # whole arm vs cubicle, from live joints
-            from .arm import clearance as arm_clearance
+            from suction_pick.robot.arm import clearance as arm_clearance
             da, link, pa = arm_clearance(list(st.jt_cur_pos), self.f.arm_walls)
             if da < d:
                 d, part, p = da, link, pa

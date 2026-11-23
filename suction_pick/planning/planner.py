@@ -43,9 +43,9 @@ import numpy as np
 from scipy.spatial import cKDTree
 from scipy.spatial.transform import Rotation
 
-from .affordance import SurfaceMap
-from .config import Gripper, PlannerParams
-from .geometry import angle_deg
+from suction_pick.vision.affordance import SurfaceMap
+from suction_pick.settings.config import Gripper, PlannerParams
+from suction_pick.vision.geometry import angle_deg
 
 
 @dataclass

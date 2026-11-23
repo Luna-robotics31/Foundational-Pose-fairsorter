@@ -25,14 +25,13 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime
-from pathlib import Path
 
 import cv2
 import numpy as np
 from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation
 
-CALIB_FILE = Path(__file__).resolve().parent / "camera_calibration.json"
+from suction_pick.settings.paths import CALIB_FILE  # data/camera_calibration.json
 
 
 # ── measurements (camera frame, mm) ─────────────────────────────────────
@@ -219,8 +218,8 @@ def run(args):
     """Visit tilted poses around the object, measure board + object, solve, check, save."""
     from cube_pick.config import CAM_TOOL, TOOL_COORDS, clear_faults, connect_robot, ensure_automatic
     from cube_pick.robot.pick_cube import CAM_RPY_DEFAULT, Cell, T_to_pose, pose_to_T
-    from .camera import capture
-    from .geometry import depth_to_points
+    from suction_pick.vision.camera import capture
+    from suction_pick.vision.geometry import depth_to_points
 
     robot = connect_robot()
     time.sleep(0.5)

@@ -25,8 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
-HERE = Path(__file__).resolve().parent
-RVIZ_CONFIG = HERE / "sim.rviz"
+from suction_pick.settings.paths import RVIZ_CONFIG, RVIZ_LOG  # written to output/
 HOME_SEED = [-42.4, -104.1, -50.0, -133.6, 97.0, 13.8]   # real joint angles at the home pose
 
 
@@ -51,7 +50,7 @@ class SimCell:
 
     def reachable(self, gripper_pose, ref=None):
         from cube_pick.robot.pick_cube import pose_to_T
-        from .arm import ik
+        from suction_pick.robot.arm import ik
         T = pose_to_T(gripper_pose) @ np.linalg.inv(self.T_flange_gripper)
         return ik(T, self.q_home if ref is None else ref)
 
@@ -62,10 +61,11 @@ def plan_scene(args):
     from cube_pick.config import SUCTION_TOOL, TOOL_COORDS
     from cube_pick.robot.home_pos import HOME_POSE
     from cube_pick.robot.pick_cube import pose_to_T
-    from . import arm, workcell
-    from .cli import OUT_ROOT, run_pipeline, stamp
-    from .geometry import depth_to_points, transform
-    from .robot import equivalent_grasps, linear_chain_problem, plan_route, waypoints
+    from suction_pick.robot import arm
+    from suction_pick.robot import workcell
+    from suction_pick.app.cli import OUT_ROOT, run_pipeline, stamp
+    from suction_pick.vision.geometry import depth_to_points, transform
+    from suction_pick.robot.pick import equivalent_grasps, linear_chain_problem, plan_route, waypoints
 
     captures = sorted(OUT_ROOT.glob("pick_*"), key=lambda p: p.name)
     if not args.capture and not captures:
@@ -105,7 +105,7 @@ def plan_scene(args):
 
 def timeline(scene, args):
     """[(q, phase, attached)] frames of the planned pick."""
-    from . import arm
+    from suction_pick.robot import arm
     g, w = scene["chosen"]
     cell, qh = scene["cell"], scene["q_home"]
     frames = []
@@ -242,8 +242,8 @@ def parcel_box(scene):
 
 def robot_markers(mf, scene, q, phase, attached, T_grip_parcel, parcel_size, ee, params):
     from cube_pick.robot.pick_cube import T_to_pose
-    from . import arm
-    from .fence import part_distances
+    from suction_pick.robot import arm
+    from suction_pick.robot.fence import part_distances
     M = mf.Marker
     out, mid = [], 0
     walls = scene["walls"]
@@ -316,6 +316,7 @@ def cloud_msg(scene, header, hide_box=None):
 
 def write_rviz_config(focus=(0.35, -0.55, 0.35), distance=2.6, yaw=2.4, path=RVIZ_CONFIG):
     fx, fy, fz = focus
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("""Panels:
   - Class: rviz_common/Displays
     Name: Displays
@@ -372,8 +373,8 @@ def run(args):
     from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
     from visualization_msgs.msg import Marker, MarkerArray
     from sensor_msgs.msg import PointCloud2
-    from .cli import build_config
-    from .planner import ee_model
+    from suction_pick.app.cli import build_config
+    from suction_pick.planning.planner import ee_model
 
     scene = plan_scene(args)
     if scene["chosen"] is None:
@@ -405,7 +406,8 @@ def run(args):
         # OpenCV's bundled Qt sets Qt plugin/font paths in this process; RViz must not inherit them
         # (it would load OpenCV's Qt plugins and exit).
         env = {k: v for k, v in os.environ.items() if not k.startswith(("QT_", "QTWEBENGINE"))}
-        log = open(HERE / "output" / "rviz.log", "w")
+        RVIZ_LOG.parent.mkdir(parents=True, exist_ok=True)
+        log = open(RVIZ_LOG, "w")
         focus, dist, yaw = (0.35, -0.55, 0.35), 2.6, 2.4
         if scene["bin"] is not None:                       # look at the robot base and the bin together
             c = scene["bin"]["corners_base"].mean(axis=0) / 1000.0

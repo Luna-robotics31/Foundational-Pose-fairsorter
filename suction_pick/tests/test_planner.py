@@ -3,11 +3,11 @@ import unittest
 
 import numpy as np
 
-from suction_pick import synthetic as S
-from suction_pick.affordance import compute_affordance
-from suction_pick.config import AffordanceParams, Gripper, PlannerParams
-from suction_pick.geometry import T_UP_FROM_CAMERA, depth_to_points, transform
-from suction_pick.planner import plan
+from suction_pick.sim import synthetic as S
+from suction_pick.vision.affordance import compute_affordance
+from suction_pick.settings.config import AffordanceParams, Gripper, PlannerParams
+from suction_pick.vision.geometry import T_UP_FROM_CAMERA, depth_to_points, transform
+from suction_pick.planning.planner import plan
 
 
 def run(boxes=None, gripper=None, params=None):
@@ -65,8 +65,8 @@ class Planner(unittest.TestCase):
 
     def test_parcel_tilted_in_pitch_and_roll(self):
         from cube_pick.robot.pick_cube import pose_to_T
-        from suction_pick.geometry import angle_deg
-        from suction_pick.robot import tool_pose
+        from suction_pick.vision.geometry import angle_deg
+        from suction_pick.robot.pick import tool_pose
         for tilt in [(15, 10), (-20, 20), (25, -20), (35, 25)]:
             boxes = [("parcel", (0.0, 0.0), (160.0, 110.0), 80.0, tilt)]
             grasps, _ = run(boxes)
@@ -81,7 +81,7 @@ class Planner(unittest.TestCase):
         self.assertEqual(too_steep, [])
 
     def test_object_tilt_report(self):
-        from suction_pick.affordance import object_tilts
+        from suction_pick.vision.affordance import object_tilts
         boxes = [("level", (-130.0, 70.0), (90.0, 90.0), 60.0, 0.0),
                  ("p15_r10", (-70.0, -80.0), (110.0, 90.0), 70.0, (15, 10)),
                  ("p-8_r25", (90.0, -80.0), (110.0, 90.0), 70.0, (-8, 25))]

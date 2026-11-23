@@ -5,7 +5,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from .geometry import project, transform
+from suction_pick.vision.geometry import project, transform
 
 COLORS = [(0, 255, 0), (0, 200, 255), (255, 0, 255), (255, 255, 0), (0, 128, 255)]
 
@@ -13,7 +13,7 @@ COLORS = [(0, 255, 0), (0, 200, 255), (255, 0, 255), (255, 255, 0), (0, 128, 255
 def draw_clearance(img, surface, grasp, K, T_cam_plan, gripper, params):
     """Obstacles near the chosen grasp's approach path (orange), points that would hit the
     gripper / camera (red), and the gripper volumes (outlines) at the cup plane."""
-    from .planner import ee_hit_mask, ee_model
+    from suction_pick.planning.planner import ee_hit_mask, ee_model
     ee = ee_model(gripper, params.hover_radius)
     P = surface.points
     ok = np.isfinite(P).all(axis=2)
