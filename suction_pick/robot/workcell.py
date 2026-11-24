@@ -228,14 +228,17 @@ def draw(img, bin_, height, K, T_cam_base):
         cv2.polylines(img, [np.round(uv).astype(np.int32).reshape(-1, 1, 2)], True, color, 2, cv2.LINE_AA)
     cv2.putText(img, f"bin walls {height:.0f} mm (yellow: board edge, orange: wall top)", (8, 32),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 200, 255), 1, cv2.LINE_AA)
-
+import rich
 
 def inside_mask(bin_, points):
     """(H, W) bool: points (robot base frame) whose XY lies inside the bin outline."""
     C = bin_["corners_base"][:, :2]
     P = np.nan_to_num(points[..., :2], nan=1e9)
     inside = np.ones(P.shape[:2], bool)
-    sign = np.sign(np.cross(C[1] - C[0], C[2] - C[1]))            # orientation of the outline
+    rich.print("points",C)
+    u, v = C[1] - C[0], C[2] - C[1]
+    sign = np.sign(u[0] * v[1] - u[1] * v[0])  # z of the 2D cross product (np.cross needs 3D)
+    rich.print("sign",sign)          # orientation of the outline
     for i in range(4):
         a, b = C[i], C[(i + 1) % 4]
         cross = (b[0] - a[0]) * (P[..., 1] - a[1]) - (b[1] - a[1]) * (P[..., 0] - a[0])

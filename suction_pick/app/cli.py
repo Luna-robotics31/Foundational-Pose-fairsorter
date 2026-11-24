@@ -339,7 +339,7 @@ def main(argv=None):
     t.add_argument("--max_tilt", type=float, default=45.0, help="Max surface / approach tilt, deg")
     common.add_argument("--frames", type=int, default=5, help="Depth frames to median-filter")
     common.add_argument("--show", action="store_true", help="Show the result window")
-    common.add_argument("--bin_height", type=float, default=100.0,
+    common.add_argument("--bin_height", type=float, default=210.0,
                         help="Height of the virtual bin walls around the board, mm (default 100)")
     common.add_argument("--no_bin", action="store_true", help="Ignore the virtual bin walls (bin.json)")
     common.add_argument("--level_tol", type=float, default=5.0,
