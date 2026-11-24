@@ -5,7 +5,7 @@ import numpy as np
 # Flange pose (tool 0) in the base frame: x y z (mm), rx ry rz (deg). Camera looks down at the table.
 # (= camera tool 5 at [480.06, -711.48, 765.70, -178.62, -1.00, -4.30], as shown on the pendant
 #  with tool 5 active, 2026-11-17)
-HOME_POSE = [449.3558654785156, -656.0225830078125, 980.5064086914062,
+HOME_POSE = [449.3558654785156, -656.0225830078125, 1032.5064086914062,
              161.18832397460938, 2.323822021484375, -147.6291046142578]
 
 
